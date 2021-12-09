@@ -55,7 +55,7 @@ func (w *readCloserWrapper) Close() error {
 	return err
 }
 
-func (rt *FTPRoundTripper) getConnection(hostport string) (conn *ftp.ServerConn, err error) {
+func (rt *FTPRoundTripper) getConnection(hostport, username, password string) (conn *ftp.ServerConn, err error) {
 	rt.lock.Lock()
 	conns, ok := rt.idleConnections[hostport]
 	if ok && len(conns) > 0 {
@@ -71,7 +71,7 @@ func (rt *FTPRoundTripper) getConnection(hostport string) (conn *ftp.ServerConn,
 		return nil, err
 	}
 
-	err = conn.Login("anonymous", "anonymous")
+	err = conn.Login(username, password)
 	if err != nil {
 		conn.Quit()
 		return nil, err
@@ -107,7 +107,17 @@ func (rt *FTPRoundTripper) RoundTrip(request *http.Request) (*http.Response, err
 		hostport = hostport + ":21"
 	}
 
-	connection, err := rt.getConnection(hostport)
+	username, password := "anonymous", "anonymous"
+
+	if requestUserName, requestPassword, valid := request.BasicAuth(); valid {
+		username = requestUserName
+		password = requestPassword
+	} else if request.URL.User != nil {
+		username = request.URL.User.Username()
+		password, _ = request.URL.User.Password()
+	}
+
+	connection, err := rt.getConnection(hostport, username, password)
 	if err != nil {
 		return nil, err
 	}
